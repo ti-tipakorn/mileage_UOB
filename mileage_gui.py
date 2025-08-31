@@ -9,6 +9,7 @@ Features:
 4) Optional distance-based estimate using demo bands + Haversine
 Data is stored in settings.json (created on first run).
 """
+import os, sys
 import json
 import math
 import os
@@ -16,7 +17,9 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple
 
 import FreeSimpleGUI as sg
-
+# Always put settings.json in the same folder as this script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, "settings.json")
 APP_NAME = "Mileage Calculator (Local GUI)"
 DATA_FILE = "settings.json"
 
