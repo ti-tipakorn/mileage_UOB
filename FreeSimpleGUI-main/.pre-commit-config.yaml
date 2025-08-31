@@ -1,0 +1,35 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+    -   id: mixed-line-ending
+        args: ["-f", "lf"]
+    -   id: check-yaml
+    -   id: check-toml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+    -   id: double-quote-string-fixer
+        files: ^(FreeSimpleGUI(?:Qt|Web|Wx)?)/(?!Demo).*\.py
+-   repo: https://github.com/asottile/reorder-python-imports
+    rev: v3.14.0
+    hooks:
+    -   id: reorder-python-imports
+        files: ^(FreeSimpleGUI(?:Qt|Web|Wx)?)/(?!Demo).*\.py
+-   repo: https://github.com/psf/black
+    rev: '25.1.0'
+    hooks:
+    -   id: black
+        args:
+            - "-S"
+            - "-l"
+            - "360"
+        files: ^(FreeSimpleGUI(?:Qt|Web|Wx)?)/(?!Demo).*\.py
+
+-   repo: https://github.com/pycqa/flake8
+    rev: '7.1.2'  # pick a git hash / tag to point to
+    hooks:
+    -   id: flake8
+        args:
+          - "--ignore"
+          - "E501,E704,E301,W503,E701,E722,E266,E203,E231,E402,F401"
+        files: FreeSimpleGUI/.*
