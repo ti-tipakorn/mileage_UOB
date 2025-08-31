@@ -2,29 +2,33 @@
 # -*- coding: utf-8 -*-
 """
 Mileage Calculator – Local Python GUI
-Features:
-1) Adjustable ratios (future multiplier) and transfer bonuses
-2) Exchange date → expiry date per program (simple validity in months)
-3) Number of passengers support
-4) Optional distance-based estimate using demo bands + Haversine
-Data is stored in settings.json (created on first run).
+- FreeSimpleGUI UI (imports from local fallback if not installed)
+- Always uses settings.json located next to this script
+- Distance-band engine + Business-Class city/region overrides
+- Adjustable ratio, transfer bonus, passengers, expiry date
 """
-import os, sys
+import os
+import sys
 import json
 import math
-import os
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Tuple
+from datetime import datetime
+from typing import Dict, Any, List, Tuple, Optional
 
-import FreeSimpleGUI as sg
+# Use FreeSimpleGUI; fall back to your local folder if needed
+try:
+    import FreeSimpleGUI as sg
+except ImportError:
+    sys.path.insert(0, r"C:\mileage_UOB\FreeSimpleGUI-main")
+    import FreeSimpleGUI as sg
+
+APP_NAME = "Mileage Calculator (Local GUI)"
+
 # Always put settings.json in the same folder as this script
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "settings.json")
-APP_NAME = "Mileage Calculator (Local GUI)"
-DATA_FILE = "settings.json"
 
 # ------------------------------
-# Demo airport & program data
+# Airports (expanded)
 # ------------------------------
 AIRPORTS = {
     "BKK": {"iata": "BKK", "city": "Bangkok", "country": "Thailand", "lat": 13.690, "lon": 100.750},
@@ -46,9 +50,71 @@ AIRPORTS = {
     "JNB": {"iata": "JNB", "city": "Johannesburg", "country": "South Africa", "lat": -26.1392, "lon": 28.2460},
     "IST": {"iata": "IST", "city": "Istanbul", "country": "Türkiye", "lat": 41.2753, "lon": 28.7519},
     "LAX": {"iata": "LAX", "city": "Los Angeles", "country": "United States", "lat": 33.9416, "lon": -118.4085},
+    "PVG": {"iata":"PVG","city":"Shanghai (Pudong)","country":"China","lat":31.1434,"lon":121.8052},
+    "SHA": {"iata":"SHA","city":"Shanghai (Hongqiao)","country":"China","lat":31.1979,"lon":121.3363},
+    "PEK": {"iata":"PEK","city":"Beijing (Capital)","country":"China","lat":40.0799,"lon":116.6031},
+    "PKX": {"iata":"PKX","city":"Beijing (Daxing)","country":"China","lat":39.5099,"lon":116.4108},
+    "FUK": {"iata":"FUK","city":"Fukuoka","country":"Japan","lat":33.5859,"lon":130.4500},
+    "NGO": {"iata":"NGO","city":"Nagoya (Chubu)","country":"Japan","lat":34.8584,"lon":136.8054},
+    "CTS": {"iata":"CTS","city":"Sapporo (Chitose)","country":"Japan","lat":42.7752,"lon":141.6923},
+    "GMP": {"iata":"GMP","city":"Seoul (Gimpo)","country":"South Korea","lat":37.5583,"lon":126.7906},
 }
 
-# Demo distance bands (Economy/Business) for a few programs; replace with real charts as needed.
+# ------------------------------
+# Destination groups (labels from your image)
+# ------------------------------
+DEST_GROUPS = {
+    "SHANGHAI": ["PVG", "SHA"],
+    "BEIJING": ["PEK", "PKX"],
+    "KIX FUK NGO": ["KIX", "FUK", "NGO"],
+    "HND NRT CTS": ["HND", "NRT", "CTS"],
+    "KOREA": ["ICN", "GMP"],
+}
+
+# ------------------------------
+# Fixed Business Class overrides per program (from your picture)
+# ------------------------------
+ROUTE_BC_OVERRIDES = {
+    "Asia Miles": {
+        "SHANGHAI": 28000,
+        "BEIJING": 28000,
+        "KIX FUK NGO": 32000,
+        "HND NRT CTS": 58000,
+        "KOREA": 28000,
+    },
+    "Royal Orchid Plus": {
+        "SHANGHAI": 30000,
+        "BEIJING": 47500,
+        "KIX FUK NGO": 47500,
+        "HND NRT CTS": 47500,
+        "KOREA": 47500,
+    },
+    "KrisFlyer": {
+        "SHANGHAI": 43000,
+        "BEIJING": 43000,
+        "KIX FUK NGO": 52000,
+        "HND NRT CTS": 52000,
+        "KOREA": 52000,
+    },
+    "Avios": {
+        "SHANGHAI": 33000,
+        "BEIJING": 38500,
+        "KIX FUK NGO": 46500,
+        "HND NRT CTS": 46500,
+        "KOREA": 38500,
+    },
+    "EVA": {
+        "SHANGHAI": 25000,
+        "BEIJING": 25000,
+        "KIX FUK NGO": 25000,
+        "HND NRT CTS": 25000,
+        "KOREA": 25000,
+    },
+}
+
+# ------------------------------
+# Demo distance bands (Economy/Business) – replace with real charts as needed
+# ------------------------------
 DEMO_RATE_TABLES = {
     "Asia Miles": {
         "own": [
@@ -56,18 +122,18 @@ DEMO_RATE_TABLES = {
             {"max": 2750, "Y": 12000, "J": 30000},
             {"max": 5000, "Y": 20000, "J": 50000},
             {"max": 7500, "Y": 30000, "J": 70000},
-            {"max": float("inf"), "Y": 42000, "J": 90000},
+            {"max": 1e12, "Y": 42000, "J": 90000},
         ],
         "partner": [
             {"max": 750, "Y": 9000, "J": 20000},
             {"max": 2750, "Y": 16000, "J": 36000},
             {"max": 5000, "Y": 26000, "J": 60000},
             {"max": 7500, "Y": 36000, "J": 80000},
-            {"max": float("inf"), "Y": 52000, "J": 100000},
+            {"max": 1e12, "Y": 52000, "J": 100000},
         ],
         "homeAirline": "Cathay Pacific",
-        "validity_months": 36,  # default expiry rule (simple fixed months from accrual)
-        "ratio_multiplier": 1.00,  # future increase factor, e.g., 1.10 = +10%
+        "validity_months": 36,
+        "ratio_multiplier": 1.00,
     },
     "KrisFlyer": {
         "own": [
@@ -75,14 +141,14 @@ DEMO_RATE_TABLES = {
             {"max": 2750, "Y": 14000, "J": 34000},
             {"max": 5000, "Y": 22000, "J": 52000},
             {"max": 7500, "Y": 32000, "J": 76000},
-            {"max": float("inf"), "Y": 50000, "J": 98000},
+            {"max": 1e12, "Y": 50000, "J": 98000},
         ],
         "partner": [
             {"max": 750, "Y": 10000, "J": 22000},
             {"max": 2750, "Y": 18000, "J": 38000},
             {"max": 5000, "Y": 28000, "J": 64000},
             {"max": 7500, "Y": 38000, "J": 88000},
-            {"max": float("inf"), "Y": 56000, "J": 110000},
+            {"max": 1e12, "Y": 56000, "J": 110000},
         ],
         "homeAirline": "Singapore Airlines",
         "validity_months": 36,
@@ -94,14 +160,14 @@ DEMO_RATE_TABLES = {
             {"max": 2750, "Y": 14000, "J": 32000},
             {"max": 5000, "Y": 22000, "J": 52000},
             {"max": 7500, "Y": 32000, "J": 72000},
-            {"max": float("inf"), "Y": 46000, "J": 92000},
+            {"max": 1e12, "Y": 46000, "J": 92000},
         ],
         "partner": [
             {"max": 750, "Y": 10000, "J": 20000},
             {"max": 2750, "Y": 16000, "J": 36000},
             {"max": 5000, "Y": 26000, "J": 60000},
             {"max": 7500, "Y": 34000, "J": 82000},
-            {"max": float("inf"), "Y": 50000, "J": 102000},
+            {"max": 1e12, "Y": 50000, "J": 102000},
         ],
         "homeAirline": "Qatar Airways",
         "validity_months": 36,
@@ -113,14 +179,14 @@ DEMO_RATE_TABLES = {
             {"max": 2750, "Y": 16000, "J": 38000},
             {"max": 5000, "Y": 26000, "J": 64000},
             {"max": 7500, "Y": 36000, "J": 90000},
-            {"max": float("inf"), "Y": 52000, "J": 120000},
+            {"max": 1e12, "Y": 52000, "J": 120000},
         ],
         "partner": [
             {"max": 750, "Y": 11000, "J": 22000},
             {"max": 2750, "Y": 18000, "J": 42000},
             {"max": 5000, "Y": 30000, "J": 70000},
             {"max": 7500, "Y": 42000, "J": 100000},
-            {"max": float("inf"), "Y": 58000, "J": 130000},
+            {"max": 1e12, "Y": 58000, "J": 130000},
         ],
         "homeAirline": "Thai Airways",
         "validity_months": 36,
@@ -134,6 +200,31 @@ DEFAULT_SETTINGS = {
     "origin": "BKK",
 }
 
+# ------------------------------
+# Helpers
+# ------------------------------
+def ensure_override_programs_exist(settings: Dict[str, Any]) -> None:
+    """If a program exists in ROUTE_BC_OVERRIDES but not in settings['programs'],
+    create a simple demo band chart so it shows up in the UI."""
+    programs = settings.setdefault("programs", {})
+    # use Asia Miles 'partner' bands as a generic template
+    template = programs.get("Asia Miles", {}).get("partner", [
+        {"max": 750, "Y": 9000, "J": 20000},
+        {"max": 2750, "Y": 16000, "J": 36000},
+        {"max": 5000, "Y": 26000, "J": 60000},
+        {"max": 7500, "Y": 36000, "J": 80000},
+        {"max": 1e12, "Y": 52000, "J": 100000},
+    ])
+
+    for prog_name in ROUTE_BC_OVERRIDES.keys():
+        if prog_name not in programs:
+            programs[prog_name] = {
+                "own": template,
+                "partner": template,
+                "homeAirline": {"Avios": "British Airways", "EVA": "EVA Air"}.get(prog_name, ""),
+                "validity_months": 36,
+                "ratio_multiplier": 1.0,
+            }
 def load_settings() -> Dict[str, Any]:
     if not os.path.exists(DATA_FILE):
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -146,16 +237,12 @@ def save_settings(settings: Dict[str, Any]) -> None:
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2)
 
-# ------------------------------
-# Math helpers
-# ------------------------------
 def haversine_miles(a: Dict[str, Any], b: Dict[str, Any]) -> float:
     R = 3958.7613
     from math import radians, sin, cos, atan2, sqrt
     dlat = radians(b["lat"] - a["lat"])
     dlon = radians(b["lon"] - a["lon"])
-    lat1 = radians(a["lat"])
-    lat2 = radians(b["lat"])
+    lat1 = radians(a["lat"]); lat2 = radians(b["lat"])
     h = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     c = 2 * atan2(sqrt(h), sqrt(1-h))
     return R * c
@@ -167,16 +254,25 @@ def band_price(bands: List[Dict[str, Any]], dist: float) -> Tuple[int, int]:
     last = bands[-1]
     return last["Y"], last["J"]
 
-def parse_date(s: str) -> datetime:
-    return datetime.strptime(s, "%Y-%m-%d")
-
 def add_months(dt: datetime, months: int) -> datetime:
-    # Simple month add (approx) – handles year rollover
     month = dt.month - 1 + months
     year = dt.year + month // 12
     month = month % 12 + 1
     day = min(dt.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
     return dt.replace(year=year, month=month, day=day)
+
+def find_dest_group(iata: str) -> Optional[str]:
+    for label, iatas in DEST_GROUPS.items():
+        if iata in iatas:
+            return label
+    return None
+
+def override_business_miles(program: str, dest_iata: str) -> Optional[int]:
+    label = find_dest_group(dest_iata)
+    if not label:
+        return None
+    prog_map = ROUTE_BC_OVERRIDES.get(program, {})
+    return prog_map.get(label)
 
 # ------------------------------
 # UI
@@ -204,10 +300,9 @@ def build_layout(settings: Dict[str, Any]):
         [sg.Button("Calculate", key="-CALC-", bind_return_key=True), sg.Button("Reset"), sg.Push(), sg.Button("Quit")],
         [sg.HorizontalSeparator()],
         [sg.Text("Results")],
-        [sg.Multiline("", key="-RESULT-", size=(80,12), disabled=True, autoscroll=True)],
+        [sg.Multiline("", key="-RESULT-", size=(90,14), disabled=True, autoscroll=True)],
     ]
 
-    # Settings tab to edit programs (validity months and default ratio)
     settings_col = [
         [sg.Text("Programs (expiry months & default future ratio)")],
         [sg.Table(
@@ -227,13 +322,14 @@ def build_layout(settings: Dict[str, Any]):
     ]
 
     layout = [
-        [sg.TabGroup([
-            [sg.Tab("Calculator", calc_col), sg.Tab("Settings", settings_col)]
-        ], expand_x=True, expand_y=True)],
+        [sg.TabGroup([[sg.Tab("Calculator", calc_col), sg.Tab("Settings", settings_col)]], expand_x=True, expand_y=True)],
         [sg.StatusBar("Ready", key="-STATUS-")]
     ]
     return layout
 
+# ------------------------------
+# Core calculation
+# ------------------------------
 def calculate(settings: Dict[str, Any], values: Dict[str, Any]) -> str:
     programs = settings["programs"]
     airports = settings["airports"]
@@ -263,26 +359,48 @@ def calculate(settings: Dict[str, Any], values: Dict[str, Any]) -> str:
     if use_dist:
         if not (origin and dest):
             return "Please choose valid origin/destination IATA codes."
-        dist = haversine_miles(origin, dest)
-        own = (airline.lower() == prog.get("homeAirline","").lower())
-        bands = prog["own"] if own else prog["partner"]
-        Y, J = band_price(bands, dist)
-        base_per_person = Y if cabin == "Economy" else J
-        source = f"Distance-based estimate: {origin['iata']}→{dest['iata']} ~ {int(round(dist))} mi; {'own' if own else 'partner'} chart"
+
+        if cabin == "Business":
+            # 1) Try fixed-route override (from your image)
+            fixed = override_business_miles(program, dest["iata"])
+            if fixed is not None:
+                base_per_person = fixed
+                source = f"Fixed BC override for {program} ({find_dest_group(dest['iata'])})"
+            else:
+                # 2) Fallback to distance bands
+                dist = haversine_miles(origin, dest)
+                own = (airline.lower() == prog.get("homeAirline", "").lower())
+                bands = prog["own"] if own else prog["partner"]
+                Y, J = band_price(bands, dist)
+                base_per_person = J
+                source = (
+                    f"Distance-based estimate: {origin['iata']}→{dest['iata']} "
+                    f"~ {int(round(dist))} mi; {'own' if own else 'partner'} chart"
+                )
+        else:
+            # Economy: distance bands (you can add Economy overrides later)
+            dist = haversine_miles(origin, dest)
+            own = (airline.lower() == prog.get("homeAirline", "").lower())
+            bands = prog["own"] if own else prog["partner"]
+            Y, J = band_price(bands, dist)
+            base_per_person = Y
+            source = (
+                f"Distance-based estimate: {origin['iata']}→{dest['iata']} "
+                f"~ {int(round(dist))} mi; {'own' if own else 'partner'} chart"
+            )
     else:
         if not miles_manual:
             return "Enter 'miles per person' or enable distance-based estimate."
         try:
-            base_per_person = int(miles_manual.replace(',', '').strip())
+            base_per_person = int(miles_manual.replace(",", "").strip())
         except ValueError:
             return "Miles per person must be a number."
         source = "Manual miles per person"
 
-    # Apply future ratio (increase) e.g., 1.10 = +10%
+    # Apply future ratio (increase)
     adj_per_person = math.ceil(base_per_person * final_ratio)
 
-    # Transfer bonus (from points → miles) means you need fewer points for same miles.
-    # Example: 20% bonus → miles = points * 1.2 → points required = miles / 1.2
+    # Transfer bonus (points→miles): need fewer points with a bonus
     bonus_factor = 1.0 + (bonus_pct / 100.0) if bonus_pct > 0 else 1.0
     points_needed_per_person = math.ceil(adj_per_person / bonus_factor)
 
@@ -320,10 +438,15 @@ def calculate(settings: Dict[str, Any], values: Dict[str, Any]) -> str:
 
     return "\n".join(lines)
 
+def build_window(settings: Dict[str, Any]):
+    layout = build_layout(settings)
+    return sg.Window(APP_NAME, layout, resizable=True, finalize=True)
+
 def main():
     settings = load_settings()
-    layout = build_layout(settings)
-    window = sg.Window(APP_NAME, layout, resizable=True, finalize=True)
+    ensure_override_programs_exist(settings)
+    save_settings(settings)  # persist so it shows next time too
+    window = build_window(settings)
 
     # Preselect first row in settings table
     if settings["programs"]:
@@ -375,7 +498,6 @@ def main():
                 continue
             settings["programs"][name]["validity_months"] = valid
             settings["programs"][name]["ratio_multiplier"] = ratio
-            # Refresh table
             rows = [[n, settings["programs"][n].get("validity_months", 36), settings["programs"][n].get("ratio_multiplier", 1.0)] for n in sorted(settings["programs"].keys())]
             window["-PROG_TABLE-"].update(values=rows)
             window["-STATUS-"].update(f"Updated {name}.")

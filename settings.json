@@ -23,7 +23,7 @@
           "J": 70000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 42000,
           "J": 90000
         }
@@ -50,7 +50,7 @@
           "J": 80000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 52000,
           "J": 100000
         }
@@ -82,7 +82,7 @@
           "J": 76000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 50000,
           "J": 98000
         }
@@ -109,7 +109,7 @@
           "J": 88000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 56000,
           "J": 110000
         }
@@ -141,7 +141,7 @@
           "J": 72000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 46000,
           "J": 92000
         }
@@ -168,7 +168,7 @@
           "J": 82000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 50000,
           "J": 102000
         }
@@ -200,7 +200,7 @@
           "J": 90000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 52000,
           "J": 120000
         }
@@ -227,12 +227,130 @@
           "J": 100000
         },
         {
-          "max": Infinity,
+          "max": 1000000000000.0,
           "Y": 58000,
           "J": 130000
         }
       ],
       "homeAirline": "Thai Airways",
+      "validity_months": 36,
+      "ratio_multiplier": 1.0
+    },
+    "Avios": {
+      "own": [
+        {
+          "max": 750,
+          "Y": 9000,
+          "J": 17000
+        },
+        {
+          "max": 2750,
+          "Y": 14000,
+          "J": 34000
+        },
+        {
+          "max": 5000,
+          "Y": 22000,
+          "J": 52000
+        },
+        {
+          "max": 7500,
+          "Y": 32000,
+          "J": 76000
+        },
+        {
+          "max": 1000000000000.0,
+          "Y": 50000,
+          "J": 98000
+        }
+      ],
+      "partner": [
+        {
+          "max": 750,
+          "Y": 10000,
+          "J": 20000
+        },
+        {
+          "max": 2750,
+          "Y": 16000,
+          "J": 36000
+        },
+        {
+          "max": 5000,
+          "Y": 26000,
+          "J": 60000
+        },
+        {
+          "max": 7500,
+          "Y": 34000,
+          "J": 82000
+        },
+        {
+          "max": 1000000000000.0,
+          "Y": 50000,
+          "J": 102000
+        }
+      ],
+      "homeAirline": "British Airways",
+      "validity_months": 36,
+      "ratio_multiplier": 1.0
+    },
+    "EVA": {
+      "own": [
+        {
+          "max": 750,
+          "Y": 9000,
+          "J": 18000
+        },
+        {
+          "max": 2750,
+          "Y": 14000,
+          "J": 32000
+        },
+        {
+          "max": 5000,
+          "Y": 22000,
+          "J": 52000
+        },
+        {
+          "max": 7500,
+          "Y": 32000,
+          "J": 72000
+        },
+        {
+          "max": 1000000000000.0,
+          "Y": 46000,
+          "J": 92000
+        }
+      ],
+      "partner": [
+        {
+          "max": 750,
+          "Y": 10000,
+          "J": 20000
+        },
+        {
+          "max": 2750,
+          "Y": 16000,
+          "J": 36000
+        },
+        {
+          "max": 5000,
+          "Y": 26000,
+          "J": 60000
+        },
+        {
+          "max": 7500,
+          "Y": 34000,
+          "J": 82000
+        },
+        {
+          "max": 1000000000000.0,
+          "Y": 50000,
+          "J": 102000
+        }
+      ],
+      "homeAirline": "EVA Air",
       "validity_months": 36,
       "ratio_multiplier": 1.0
     }
@@ -370,6 +488,62 @@
       "country": "United States",
       "lat": 33.9416,
       "lon": -118.4085
+    },
+    "PVG": {
+      "iata": "PVG",
+      "city": "Shanghai (Pudong)",
+      "country": "China",
+      "lat": 31.1434,
+      "lon": 121.8052
+    },
+    "SHA": {
+      "iata": "SHA",
+      "city": "Shanghai (Hongqiao)",
+      "country": "China",
+      "lat": 31.1979,
+      "lon": 121.3363
+    },
+    "PEK": {
+      "iata": "PEK",
+      "city": "Beijing (Capital)",
+      "country": "China",
+      "lat": 40.0799,
+      "lon": 116.6031
+    },
+    "PKX": {
+      "iata": "PKX",
+      "city": "Beijing (Daxing)",
+      "country": "China",
+      "lat": 39.5099,
+      "lon": 116.4108
+    },
+    "FUK": {
+      "iata": "FUK",
+      "city": "Fukuoka",
+      "country": "Japan",
+      "lat": 33.5859,
+      "lon": 130.45
+    },
+    "NGO": {
+      "iata": "NGO",
+      "city": "Nagoya (Chubu)",
+      "country": "Japan",
+      "lat": 34.8584,
+      "lon": 136.8054
+    },
+    "CTS": {
+      "iata": "CTS",
+      "city": "Sapporo (Chitose)",
+      "country": "Japan",
+      "lat": 42.7752,
+      "lon": 141.6923
+    },
+    "GMP": {
+      "iata": "GMP",
+      "city": "Seoul (Gimpo)",
+      "country": "South Korea",
+      "lat": 37.5583,
+      "lon": 126.7906
     }
   },
   "origin": "BKK"
