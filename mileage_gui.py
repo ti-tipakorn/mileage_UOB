@@ -61,7 +61,7 @@ AIRPORTS = {
 }
 
 # ------------------------------
-# Destination groups (labels from your image)
+# Destination groups
 # ------------------------------
 DEST_GROUPS = {
     "SHANGHAI": ["PVG", "SHA"],
@@ -72,7 +72,7 @@ DEST_GROUPS = {
 }
 
 # ------------------------------
-# Fixed Business Class overrides per program (from your picture)
+# Fixed Business Class overrides per program
 # ------------------------------
 ROUTE_BC_OVERRIDES = {
     "Asia Miles": {
@@ -203,28 +203,6 @@ DEFAULT_SETTINGS = {
 # ------------------------------
 # Helpers
 # ------------------------------
-def ensure_override_programs_exist(settings: Dict[str, Any]) -> None:
-    """If a program exists in ROUTE_BC_OVERRIDES but not in settings['programs'],
-    create a simple demo band chart so it shows up in the UI."""
-    programs = settings.setdefault("programs", {})
-    # use Asia Miles 'partner' bands as a generic template
-    template = programs.get("Asia Miles", {}).get("partner", [
-        {"max": 750, "Y": 9000, "J": 20000},
-        {"max": 2750, "Y": 16000, "J": 36000},
-        {"max": 5000, "Y": 26000, "J": 60000},
-        {"max": 7500, "Y": 36000, "J": 80000},
-        {"max": 1e12, "Y": 52000, "J": 100000},
-    ])
-
-    for prog_name in ROUTE_BC_OVERRIDES.keys():
-        if prog_name not in programs:
-            programs[prog_name] = {
-                "own": template,
-                "partner": template,
-                "homeAirline": {"Avios": "British Airways", "EVA": "EVA Air"}.get(prog_name, ""),
-                "validity_months": 36,
-                "ratio_multiplier": 1.0,
-            }
 def load_settings() -> Dict[str, Any]:
     if not os.path.exists(DATA_FILE):
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -327,9 +305,7 @@ def build_layout(settings: Dict[str, Any]):
     ]
     return layout
 
-# ------------------------------
-# Core calculation
-# ------------------------------
+# Important CAL ------------------------------
 def calculate(settings: Dict[str, Any], values: Dict[str, Any]) -> str:
     programs = settings["programs"]
     airports = settings["airports"]
@@ -337,58 +313,56 @@ def calculate(settings: Dict[str, Any], values: Dict[str, Any]) -> str:
     program = values["-PROGRAM-"]
     cabin = values["-CABIN-"]
     pax = int(values["-PAX-"])
-    bonus_pct = float(values["-BONUS-"] or 0)
-    ratio_input = float(values["-RATIO-"] or 1.0)
-    origin = airports.get(values["-ORIGIN-"])
-    dest = airports.get(values["-DEST-"])
-    airline = (values["-AIRLINE-"] or "").strip()
+    bonus_pct = float(values.get("-BONUS-", "0") or 0)
+    ratio_input = float(values.get("-RATIO-", "1.00") or 1.0)
+    airline = (values.get("-AIRLINE-", "") or "").strip()
     use_dist = values["-USE_DIST-"]
     miles_manual = values["-MILES_MANUAL-"].strip()
     exchange_date_str = values["-DATE-"]
-
+    
+    # Input validation
     if not program:
         return "Please select a program."
-    prog = programs[program]
-    default_ratio = float(prog.get("ratio_multiplier", 1.0))
-    validity_months = int(prog.get("validity_months", 36))
+    
+    try:
+        dt = datetime.strptime(exchange_date_str, "%Y-%m-%d")
+    except ValueError:
+        return "Exchange date must be YYYY-MM-DD."
 
-    # Final ratio = per-program default × user-entered multiplier
-    final_ratio = default_ratio * (ratio_input if ratio_input > 0 else 1.0)
+    # Determine miles per person based on user choice
+    base_per_person = 0
+    source = ""
 
-    # Determine miles per person
     if use_dist:
+        origin_iata = values.get("-ORIGIN-")
+        dest_iata = values.get("-DEST-")
+        origin = airports.get(origin_iata)
+        dest = airports.get(dest_iata)
         if not (origin and dest):
             return "Please choose valid origin/destination IATA codes."
-
+        
+        # Priority 1: Check for fixed Business Class override
         if cabin == "Business":
-            # 1) Try fixed-route override (from your image)
-            fixed = override_business_miles(program, dest["iata"])
-            if fixed is not None:
-                base_per_person = fixed
-                source = f"Fixed BC override for {program} ({find_dest_group(dest['iata'])})"
-            else:
-                # 2) Fallback to distance bands
-                dist = haversine_miles(origin, dest)
-                own = (airline.lower() == prog.get("homeAirline", "").lower())
-                bands = prog["own"] if own else prog["partner"]
-                Y, J = band_price(bands, dist)
-                base_per_person = J
-                source = (
-                    f"Distance-based estimate: {origin['iata']}→{dest['iata']} "
-                    f"~ {int(round(dist))} mi; {'own' if own else 'partner'} chart"
-                )
-        else:
-            # Economy: distance bands (you can add Economy overrides later)
+            fixed_miles = override_business_miles(program, dest["iata"])
+            if fixed_miles is not None:
+                base_per_person = fixed_miles
+                source = f"Fixed Business Class override for {program} ({find_dest_group(dest['iata'])})"
+            
+        # Priority 2: Fallback to distance-based band calculation
+        if base_per_person == 0:
             dist = haversine_miles(origin, dest)
-            own = (airline.lower() == prog.get("homeAirline", "").lower())
-            bands = prog["own"] if own else prog["partner"]
+            is_own_airline = (airline.lower() == programs[program].get("homeAirline", "").lower())
+            
+            bands = programs[program]["own"] if is_own_airline else programs[program]["partner"]
             Y, J = band_price(bands, dist)
-            base_per_person = Y
+            base_per_person = J if cabin == "Business" else Y
+            
             source = (
                 f"Distance-based estimate: {origin['iata']}→{dest['iata']} "
-                f"~ {int(round(dist))} mi; {'own' if own else 'partner'} chart"
+                f"~ {int(round(dist)):,} mi; {'own' if is_own_airline else 'partner'} chart"
             )
-    else:
+            
+    else:  # Manual miles entered
         if not miles_manual:
             return "Enter 'miles per person' or enable distance-based estimate."
         try:
@@ -397,45 +371,41 @@ def calculate(settings: Dict[str, Any], values: Dict[str, Any]) -> str:
             return "Miles per person must be a number."
         source = "Manual miles per person"
 
+    # All calculations now proceed from a single, determined `base_per_person` value.
+    prog = programs[program]
+    final_ratio = (float(prog.get("ratio_multiplier", 1.0))) * (ratio_input if ratio_input > 0 else 1.0)
+    validity_months = int(prog.get("validity_months", 36))
+    
     # Apply future ratio (increase)
     adj_per_person = math.ceil(base_per_person * final_ratio)
-
+    
     # Transfer bonus (points→miles): need fewer points with a bonus
     bonus_factor = 1.0 + (bonus_pct / 100.0) if bonus_pct > 0 else 1.0
     points_needed_per_person = math.ceil(adj_per_person / bonus_factor)
-
+    
     total_miles = adj_per_person * pax
     total_points = points_needed_per_person * pax
-
-    # Expiry date
-    try:
-        dt = datetime.strptime(exchange_date_str, "%Y-%m-%d")
-    except ValueError:
-        return "Exchange date must be YYYY-MM-DD."
+    
+    # Calculate expiry date
     expiry_dt = add_months(dt, validity_months)
     expiry_str = expiry_dt.strftime("%Y-%m-%d")
 
-    lines = []
-    lines.append(f"Program: {program}   Cabin: {cabin}   Passengers: {pax}")
-    lines.append(f"Airline: {airline or '(unspecified)'}   Future ratio ×: {final_ratio:.2f} (program default × input)")
-    if use_dist:
-        lines.append(source)
-    else:
-        lines.append(f"{source}: {base_per_person:,} miles")
-
-    lines.append("")
-    lines.append(f"Miles per person (after ratio): {adj_per_person:,}")
-    if bonus_pct > 0:
-        lines.append(f"Transfer bonus: +{bonus_pct:.0f}% → Points per person needed: {points_needed_per_person:,}")
-    else:
-        lines.append(f"Points per person needed (no bonus): {points_needed_per_person:,}")
-    lines.append("")
-    lines.append(f"TOTAL miles:  {total_miles:,}")
-    lines.append(f"TOTAL points: {total_points:,}")
-    lines.append("")
-    lines.append(f"Exchange date: {exchange_date_str} → Expiry in {validity_months} months: {expiry_str}")
-    lines.append("(Note: real expiry rules can be more complex. You can change validity in Settings.)")
-
+    # Format output
+    lines = [
+        f"Program: {program}   Cabin: {cabin}   Passengers: {pax}",
+        f"Airline: {airline or '(unspecified)'}   Future ratio ×: {final_ratio:.2f}",
+        source,
+        "",
+        f"Miles per person (after ratio): {adj_per_person:,}",
+        f"Transfer bonus: +{bonus_pct:.0f}% → Points per person needed: {points_needed_per_person:,}" if bonus_pct > 0 else f"Points per person needed: {points_needed_per_person:,}",
+        "",
+        f"TOTAL miles:  {total_miles:,}",
+        f"TOTAL points: {total_points:,}",
+        "",
+        f"Exchange date: {exchange_date_str} → Expiry in {validity_months} months: {expiry_str}",
+        "(Note: real expiry rules can be more complex. You can change validity in Settings.)"
+    ]
+    
     return "\n".join(lines)
 
 def build_window(settings: Dict[str, Any]):
@@ -444,8 +414,6 @@ def build_window(settings: Dict[str, Any]):
 
 def main():
     settings = load_settings()
-    ensure_override_programs_exist(settings)
-    save_settings(settings)  # persist so it shows next time too
     window = build_window(settings)
 
     # Preselect first row in settings table
